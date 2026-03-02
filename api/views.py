@@ -160,6 +160,9 @@ class PolishSummaryView(views.APIView):
             return Response({"error": "No summary provided"}, status=status.HTTP_400_BAD_REQUEST)
         
         polished = polish_summary_ai(summary)
+        if isinstance(polished, str) and polished.startswith("Error:"):
+            # Keep UX usable when AI quota is exhausted: return original text and warning.
+            return Response({"polished": summary, "warning": polished}, status=status.HTTP_200_OK)
         return Response({"polished": polished})
 
 class JobListCreateView(generics.ListCreateAPIView):
@@ -288,6 +291,8 @@ class GenerateJDView(views.APIView):
             return Response({"error": "Job title is required"}, status=status.HTTP_400_BAD_REQUEST)
         
         jd = generate_jd_ai(f"Title: {title}. Context: {prompt}")
+        if isinstance(jd, str) and jd.startswith("Error:"):
+            return Response({"error": jd}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         return Response({"description": jd})
 
 class JobApplicationDetailView(generics.RetrieveAPIView):
