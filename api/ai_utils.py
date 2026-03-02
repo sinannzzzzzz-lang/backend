@@ -38,8 +38,14 @@ def _normalize_ai_error(error_text: str) -> str:
     if "invalid api key" in lowered or "unauthorized" in lowered or "401" in lowered:
         return "Error: Invalid OpenRouter API key. Please update OPENROUTER_API_KEY in server/.env."
 
+    if "missing authentication header" in lowered or "no auth credentials found" in lowered:
+        return "Error: OpenRouter auth header missing. Verify OPENROUTER_API_KEY is set correctly and restart backend."
+
     if "permission denied" in lowered or "insufficient permissions" in lowered or "forbidden" in lowered:
         return "Error: OpenRouter access denied for this key/project."
+
+    if "no endpoints found matching your data policy" in lowered:
+        return "Error: OpenRouter data policy blocks free models. Update privacy settings at https://openrouter.ai/settings/privacy."
 
     if ("not found" in lowered and "model" in lowered) or ("no endpoints found" in lowered):
         return "Error: OpenRouter model unavailable. Try another free model in OPENROUTER_MODEL."
@@ -102,6 +108,24 @@ def _build_headers(api_key: str) -> dict:
     return headers
 
 
+def _normalize_api_key(raw_key: Optional[str]) -> Optional[str]:
+    if raw_key is None:
+        return None
+
+    key = str(raw_key).strip()
+    if not key:
+        return None
+
+    # Support values copied as: OPENROUTER_API_KEY="sk-or-..."
+    key = key.strip('"').strip("'").strip()
+
+    # Support values copied with Bearer prefix.
+    if key.lower().startswith("bearer "):
+        key = key[7:].strip()
+
+    return key or None
+
+
 def _extract_content(data: dict) -> Optional[str]:
     choices = data.get("choices") or []
     if not choices:
@@ -121,12 +145,12 @@ def _extract_content(data: dict) -> Optional[str]:
 
 
 def get_ai_response(prompt: str, system_instruction: str = "") -> str:
-    api_key = (
+    api_key = _normalize_api_key(
         getattr(settings, "OPENROUTER_API_KEY", None)
         or getattr(settings, "GEMINI_API_KEY", None)
     )
     if not api_key:
-        return "Error: OPENROUTER_API_KEY is not set in server/.env."
+        return "Error: OPENROUTER_API_KEY is missing/empty in server/.env."
 
     headers = _build_headers(api_key)
     messages = []
